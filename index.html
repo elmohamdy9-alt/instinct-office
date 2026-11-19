@@ -43,7 +43,7 @@
 <body>
 <div id="board">
   <h1><span class="live"></span>LIVE — INSTINCT AI OFFICE</h1>
-  <h2>حالة الفريق دلوقتي</h2>
+  <h2>حالة الفريق دلوقتي <button id="bToggle" style="float:left;background:none;border:1px solid rgba(255,255,255,.25);color:#dfe7f2;border-radius:8px;width:26px;height:22px;font-size:14px;cursor:pointer;line-height:1">−</button></h2>
   <div id="rows"></div>
   <div id="foot">بيقرأ الحالة…</div>
 </div>
@@ -75,7 +75,7 @@ controls.minDistance = 3;
 controls.maxDistance = 55;
 controls.maxPolarAngle = Math.PI * .52;
 
-const CAM_OFFICE = {pos:[0, 9.5, 17], tgt:[0, 1.4, -1]};
+const CAM_OFFICE = {pos:[0, 11.5, 22], tgt:[0, 1.2, -1.5]};
 const CAM_TOP    = {pos:[0, 26, 6],  tgt:[0, 0, -1]};
 function flyTo(v){ camera.position.set(...v.pos); controls.target.set(...v.tgt); }
 flyTo(CAM_OFFICE);
@@ -370,6 +370,17 @@ async function loadStatus(){
 }
 loadStatus();
 setInterval(loadStatus, 30000);
+
+/* ---------- board toggle ---------- */
+const bToggle = document.getElementById('bToggle');
+bToggle.onclick = () => {
+  const rows = document.getElementById('rows');
+  const foot = document.getElementById('foot');
+  const hidden = rows.style.display === 'none';
+  rows.style.display = hidden ? '' : 'none';
+  foot.style.display = hidden ? '' : 'none';
+  bToggle.textContent = hidden ? '−' : '+';
+};
 
 /* ---------- view buttons ---------- */
 const bOffice = document.getElementById('bOffice');
