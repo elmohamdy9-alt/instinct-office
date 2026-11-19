@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>مكتب انستينكت — فريق المساعدين</title>
+<style>
+  html,body{margin:0;padding:0;overflow:hidden;background:#e8eef4;font-family:'Segoe UI',Tahoma,Arial,sans-serif}
+  canvas{display:block}
+  #board{
+    position:fixed;top:14px;left:14px;width:330px;max-width:82vw;max-height:86vh;overflow-y:auto;
+    background:rgba(13,18,28,.92);border:1px solid rgba(255,255,255,.08);border-radius:14px;
+    color:#e9eef6;padding:14px 16px;direction:rtl;backdrop-filter:blur(6px);z-index:5;
+    box-shadow:0 8px 30px rgba(0,0,0,.35);
+  }
+  #board h1{font-size:13px;letter-spacing:2px;margin:0 0 2px;color:#f3c44f;direction:ltr;text-align:right}
+  #board h2{font-size:17px;margin:0 0 10px;font-weight:700}
+  #board .live{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff5f57;margin-left:6px;animation:bl 1.6s infinite}
+  @keyframes bl{0%,100%{opacity:1}50%{opacity:.25}}
+  .row{display:flex;align-items:flex-start;gap:9px;padding:8px 4px;border-top:1px solid rgba(255,255,255,.07);cursor:pointer}
+  .row:hover{background:rgba(255,255,255,.05)}
+  .dot{flex:0 0 auto;width:10px;height:10px;border-radius:50%;margin-top:5px}
+  .info{flex:1 1 auto;min-width:0}
+  .nm{font-weight:700;font-size:13px;letter-spacing:1px;direction:ltr;display:inline-block}
+  .role{font-size:11.5px;color:#aeb9c9;margin-top:1px}
+  .task{font-size:12.5px;color:#dde5ef;margin-top:3px;line-height:1.45}
+  .badge{flex:0 0 auto;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:20px;margin-top:2px;white-space:nowrap}
+  .b-work{background:rgba(46,204,113,.15);color:#3fe08a;border:1px solid rgba(46,204,113,.5)}
+  .b-idle{background:rgba(149,165,166,.13);color:#aeb9c9;border:1px solid rgba(149,165,166,.45)}
+  .b-stale{background:rgba(241,196,15,.13);color:#f3d14f;border:1px solid rgba(241,196,15,.45)}
+  .ago{display:block;font-size:10px;color:#7c8a9d;margin-top:2px}
+  #foot{margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.1);font-size:10.5px;color:#8fa0b5;line-height:1.6}
+  #btns{position:fixed;bottom:16px;right:16px;display:flex;gap:8px;z-index:5;direction:ltr}
+  #btns button{
+    background:rgba(20,28,42,.88);color:#dfe7f2;border:1px solid rgba(255,255,255,.14);
+    padding:8px 16px;border-radius:20px;font-size:13px;font-family:inherit;cursor:pointer;
+  }
+  #btns button.on{background:#f3c44f;color:#1c2434;border-color:#f3c44f;font-weight:700}
+  #btns button:hover{border-color:#f3c44f}
+</style>
+</head>
+<body>
+<div id="board">
+  <h1><span class="live"></span>LIVE — INSTINCT AI OFFICE</h1>
+  <h2>حالة الفريق دلوقتي</h2>
+  <div id="rows"></div>
+  <div id="foot">بيقرأ الحالة…</div>
+</div>
+<div id="btns">
+  <button id="bOffice" class="on">عرض المكتب</button>
+  <button id="bRot">دوران تلقائي</button>
+  <button id="bTop">من فوق</button>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+/* ---------- basic scene ---------- */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xe8eef4);
+scene.fog = new THREE.Fog(0xe8eef4, 45, 90);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(52, innerWidth/innerHeight, .1, 200);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = .07;
+controls.minDistance = 3;
+controls.maxDistance = 55;
+controls.maxPolarAngle = Math.PI * .52;
+
+const CAM_OFFICE = {pos:[0, 9.5, 17], tgt:[0, 1.4, -1]};
+const CAM_TOP    = {pos:[0, 26, 6],  tgt:[0, 0, -1]};
+function flyTo(v){ camera.position.set(...v.pos); controls.target.set(...v.tgt); }
+flyTo(CAM_OFFICE);
+
+/* ---------- helpers ---------- */
+function tex(w, h, draw){
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
+}
+function nameTag(text, color){
+  const t = tex(512, 140, (g, w, h) => {
+    g.clearRect(0,0,w,h);
+    g.fillStyle = color;
+    const r = 40;
+    g.beginPath();
+    g.moveTo(r,8); g.lineTo(w-r,8); g.quadraticCurveTo(w-8,8,w-8,r);
+    g.lineTo(w-8,h-r); g.quadraticCurveTo(w-8,h-8,w-r,h-8);
+    g.lineTo(r,h-8); g.quadraticCurveTo(8,h-8,8,h-r);
+    g.lineTo(8,r); g.quadraticCurveTo(8,8,r,8); g.fill();
+    g.font = 'bold 62px Segoe UI, Arial';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = '#ffffff';
+    g.fillText(text, w/2, h/2 + 4);
+  });
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({map:t, transparent:true, depthWrite:false}));
+  s.scale.set(2.6, .72, 1);
+  return s;
+}
+let seed = 11;
+function rnd(){ seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+function codeScreen(color){
+  return tex(256, 170, (g, w, h) => {
+    g.fillStyle = '#0d1117'; g.fillRect(0,0,w,h);
+    const palette = [color, '#79c0ff', '#a5d6a7', '#8b949e', '#e8b23a'];
+    for (let y = 12; y < h - 8; y += 13){
+      let x = 10 + rnd() * 30;
+      const n = 2 + Math.floor(rnd() * 3);
+      for (let i = 0; i < n && x < w - 16; i++){
+        const len = 16 + rnd() * 55;
+        g.fillStyle = palette[Math.floor(rnd() * palette.length)];
+        g.globalAlpha = .55 + rnd() * .45;
+        g.fillRect(x, y, Math.min(len, w - x - 8), 6);
+        x += len + 9;
+      }
+    }
+    g.globalAlpha = 1;
+  });
+}
+
+/* ---------- room ---------- */
+const RW = 38, RD = 24, RH = 5.4;
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(RW, RD),
+  new THREE.MeshStandardMaterial({color:0xd9c49c, roughness:.8}));
+floor.rotation.x = -Math.PI/2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+const grid = new THREE.GridHelper(RW, 24, 0xc4ab7d, 0xccb482);
+grid.position.y = .01; grid.scale.z = RD / RW;
+grid.material.transparent = true; grid.material.opacity = .35;
+scene.add(grid);
+
+const wallMat = new THREE.MeshStandardMaterial({color:0xf5f3ec, roughness:.95});
+function wall(w, x, z, ry){
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, RH), wallMat);
+  m.position.set(x, RH/2, z); m.rotation.y = ry;
+  m.receiveShadow = true; scene.add(m);
+}
+wall(RW, 0, -RD/2, 0);
+wall(RD, -RW/2, 0, Math.PI/2);
+wall(RD, RW/2, 0, -Math.PI/2);
+
+/* windows on the back wall */
+const sky = new THREE.Mesh(new THREE.PlaneGeometry(RW - 6, 2.9),
+  new THREE.MeshBasicMaterial({color:0xa8d0ee}));
+sky.position.set(0, 3.2, -RD/2 + .03); scene.add(sky);
+const frameMat = new THREE.MeshStandardMaterial({color:0x46505f, roughness:.4, metalness:.5});
+for (let i = 0; i <= 7; i++){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(.14, 3.1, .14), frameMat);
+  m.position.set(-(RW-6)/2 + i*(RW-6)/7, 3.2, -RD/2 + .09); scene.add(m);
+}
+const sill = new THREE.Mesh(new THREE.BoxGeometry(RW - 5.6, .14, .34), frameMat);
+sill.position.set(0, 1.72, -RD/2 + .1); scene.add(sill);
+
+/* wall sign */
+const sign = new THREE.Mesh(new THREE.PlaneGeometry(8, 2.6),
+  new THREE.MeshBasicMaterial({map: tex(1024, 340, (g, w, h) => {
+    g.clearRect(0,0,w,h);
+    g.font = 'bold 150px Segoe UI, Arial'; g.textAlign = 'center';
+    g.fillStyle = '#c9971f'; g.fillText('INSTINCT', w/2, 180);
+    g.font = 'bold 44px Segoe UI, Tahoma'; g.fillStyle = '#5a6678';
+    g.fillText('مكتب المساعدين — AI OFFICE', w/2, 268);
+  }), transparent:true}));
+sign.rotation.y = -Math.PI/2;
+sign.position.set(RW/2 - .06, 3.4, 0);
+scene.add(sign);
+
+/* lights */
+scene.add(new THREE.AmbientLight(0xffffff, .42));
+scene.add(new THREE.HemisphereLight(0xeaf4ff, 0xcbb694, .32));
+const sun = new THREE.DirectionalLight(0xfff1da, .8);
+sun.position.set(8, 13, -13);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -22; sun.shadow.camera.right = 22;
+sun.shadow.camera.top = 16; sun.shadow.camera.bottom = -16;
+scene.add(sun);
+
+/* ---------- furniture ---------- */
+const topMat = new THREE.MeshStandardMaterial({color:0xece8e0, roughness:.5});
+const legMat = new THREE.MeshStandardMaterial({color:0xffffff, roughness:.4, metalness:.3});
+function desk(){
+  const g = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.BoxGeometry(2.3, .1, 1.15), topMat);
+  top.position.y = 1; top.castShadow = true; top.receiveShadow = true; g.add(top);
+  [[-1.05,-.48],[1.05,-.48],[-1.05,.48],[1.05,.48]].forEach(([x,z]) => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(.08, .95, .08), legMat);
+    leg.position.set(x, .48, z); leg.castShadow = true; g.add(leg);
+  });
+  return g;
+}
+function laptop(color){
+  const g = new THREE.Group();
+  const shell = new THREE.MeshStandardMaterial({color:0xc3c9d2, roughness:.35, metalness:.6});
+  const base = new THREE.Mesh(new THREE.BoxGeometry(.66, .035, .46), shell);
+  base.castShadow = true; g.add(base);
+  const lid = new THREE.Group(); lid.position.set(0, .02, -.22); lid.rotation.x = -1.22;
+  const back = new THREE.Mesh(new THREE.BoxGeometry(.66, .46, .02), shell);
+  back.position.y = .22; back.castShadow = true; lid.add(back);
+  const scr = new THREE.Mesh(new THREE.PlaneGeometry(.6, .4),
+    new THREE.MeshBasicMaterial({map: codeScreen(color)}));
+  scr.position.set(0, .22, .013); lid.add(scr);
+  g.add(lid);
+  return g;
+}
+function chair(){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({color:0x2e3542, roughness:.7});
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(.58, .1, .52), mat);
+  seat.position.y = .56; seat.castShadow = true; g.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(.54, .62, .09), mat);
+  back.position.set(0, .98, -.27); back.castShadow = true; g.add(back);
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(.045, .045, .52, 10), mat);
+  post.position.y = .28; g.add(post);
+  for (let i = 0; i < 5; i++){
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(.4, .04, .07), mat);
+    leg.position.y = .03; leg.rotation.y = i * Math.PI * 2 / 5;
+    leg.translateX(.17); g.add(leg);
+  }
+  return g;
+}
+function person(shirt){
+  const g = new THREE.Group();
+  const skin = new THREE.MeshStandardMaterial({color:0xc98e5f, roughness:.6});
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry ? new THREE.CapsuleGeometry(.21, .34, 4, 12) : new THREE.SphereGeometry(.3, 12, 10),
+    new THREE.MeshStandardMaterial({color:shirt, roughness:.7}));
+  body.scale.set(1, 1.05, .8);
+  body.position.y = 1.06; body.castShadow = true; g.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(.17, 16, 14), skin);
+  head.position.y = 1.52; head.castShadow = true; g.add(head);
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(.175, 16, 12, 0, Math.PI*2, 0, Math.PI*.55),
+    new THREE.MeshStandardMaterial({color:0x2a2118, roughness:.9}));
+  hair.position.y = 1.56; g.add(hair);
+  return g;
+}
+function plant(x, z){
+  const g = new THREE.Group();
+  const pot = new THREE.Mesh(new THREE.CylinderGeometry(.32, .26, .5, 14),
+    new THREE.MeshStandardMaterial({color:0xb5714f, roughness:.8}));
+  pot.position.y = .25; pot.castShadow = true; g.add(pot);
+  const leaf = new THREE.Mesh(new THREE.SphereGeometry(.55, 14, 12),
+    new THREE.MeshStandardMaterial({color:0x5e8c5a, roughness:.9}));
+  leaf.position.y = 1.05; leaf.castShadow = true; g.add(leaf);
+  g.position.set(x, 0, z); scene.add(g);
+}
+plant(-RW/2 + 1.6, -RD/2 + 1.6);
+plant(RW/2 - 1.6, -RD/2 + 1.6);
+plant(-RW/2 + 1.6, RD/2 - 1.8);
+
+/* ---------- team ---------- */
+const TEAM = [
+  {id:'instinct', name:'INSTINCT', color:'#e8b23a', role:'مدير الفريق — بيوزع الشغل ويراجع'},
+  {id:'claude',   name:'CLAUDE',   color:'#d97757', role:'بناء أدوات المحمدي استوديو'},
+  {id:'chatgpt',  name:'CHATGPT',  color:'#74aa9c', role:'اختبار الأدوات وحل المشاكل البرمجية'},
+  {id:'gemini',   name:'GEMINI',   color:'#4b8bf5', role:'التعلم والأبحاث (عن طريق AI Studio)'},
+  {id:'grok',     name:'GROK',     color:'#9aa7b5', role:'توليد الصور والفيديو'},
+  {id:'deepseek', name:'DEEPSEEK', color:'#4d6bfe', role:'مراجعة الكود والتجارب السريعة'},
+  {id:'muse',     name:'MUSE',     color:'#d8649c', role:'الألوان والتصميم'},
+  {id:'manus',    name:'MANUS',    color:'#8b6fd8', role:'مشاريع العملاء'},
+];
+const XS = [-13.5, -4.5, 4.5, 13.5];
+const ZS = [-5.2, 2.6];
+const spots = [];
+const statusLights = {};
+
+TEAM.forEach((m, i) => {
+  const row = Math.floor(i / 4), col = i % 4;
+  const x = XS[col], z = ZS[row];
+  const face = row === 0 ? 0 : Math.PI;   /* back row faces front, front row faces back */
+
+  const rug = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 2.6),
+    new THREE.MeshStandardMaterial({color:new THREE.Color(m.color), transparent:true, opacity:.22, roughness:1}));
+  rug.rotation.x = -Math.PI/2; rug.position.set(x, .02, z); rug.receiveShadow = true;
+  scene.add(rug);
+
+  const d = desk(); d.position.set(x, 0, z); d.rotation.y = face; scene.add(d);
+  const lp = laptop(m.color); lp.position.set(x, 1.06, z + (row === 0 ? .12 : -.12)); lp.rotation.y = face; scene.add(lp);
+
+  const ch = chair(); ch.position.set(x, 0, z + (row === 0 ? 1.05 : -1.05)); ch.rotation.y = face; scene.add(ch);
+  const p = person(new THREE.Color(m.color).getHex()); p.position.set(x, 0, z + (row === 0 ? 1.02 : -1.02)); p.rotation.y = face; scene.add(p);
+
+  const tag = nameTag(m.name, m.color); tag.position.set(x, 2.35, z + (row === 0 ? 1 : -1)); scene.add(tag);
+
+  const light = new THREE.Mesh(new THREE.SphereGeometry(.09, 10, 8),
+    new THREE.MeshBasicMaterial({color:0x95a5a6}));
+  light.position.set(x + .95, 1.1, z + (row === 0 ? .4 : -.4));
+  scene.add(light);
+  statusLights[m.id] = light;
+
+  spots.push({id:m.id, x, z: z + (row === 0 ? 1 : -1)});
+});
+
+/* ---------- status board ---------- */
+const rowsEl = document.getElementById('rows');
+const footEl = document.getElementById('foot');
+const STALE_MS = 3 * 60 * 60 * 1000;   /* older than 3h = unconfirmed */
+
+function ago(ts){
+  const s = Math.max(0, (Date.now() - ts) / 1000);
+  if (s < 60) return 'دلوقتي';
+  const m = Math.floor(s / 60);
+  if (m < 60) return 'من ' + m + ' دقيقة';
+  const h = Math.floor(m / 60);
+  if (h < 24) return 'من ' + h + ' ساعة';
+  return 'من ' + Math.floor(h / 24) + ' يوم';
+}
+function fmtTime(ts){
+  return new Date(ts).toLocaleString('ar-EG', {day:'numeric', month:'long', hour:'2-digit', minute:'2-digit'});
+}
+
+function render(data){
+  rowsEl.innerHTML = '';
+  TEAM.forEach(m => {
+    const st = (data.members || []).find(x => x.id === m.id) || {};
+    const ts = st.updated ? Date.parse(st.updated) : 0;
+    const stale = !ts || (Date.now() - ts) > STALE_MS;
+    let badge, cls;
+    if (stale){ badge = 'غير مؤكد'; cls = 'b-stale'; }
+    else if (st.status === 'working'){ badge = 'يشتغل'; cls = 'b-work'; }
+    else { badge = 'فاضي'; cls = 'b-idle'; }
+
+    const row = document.createElement('div'); row.className = 'row';
+    const dot = document.createElement('div'); dot.className = 'dot'; dot.style.background = m.color;
+    const info = document.createElement('div'); info.className = 'info';
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = m.name; nm.style.color = m.color;
+    const role = document.createElement('div'); role.className = 'role'; role.textContent = m.role;
+    const task = document.createElement('div'); task.className = 'task'; task.textContent = st.task || '—';
+    const agoEl = document.createElement('span'); agoEl.className = 'ago';
+    agoEl.textContent = ts ? 'آخر تحديث ' + ago(ts) : 'مفيش تحديث لسه';
+    info.appendChild(nm); info.appendChild(role); info.appendChild(task); info.appendChild(agoEl);
+    const b = document.createElement('div'); b.className = 'badge ' + cls; b.textContent = badge;
+    row.appendChild(dot); row.appendChild(info); row.appendChild(b);
+    row.onclick = () => {
+      const s = spots.find(p => p.id === m.id);
+      if (s){ controls.target.set(s.x, 1.1, s.z); camera.position.set(s.x, 5.5, s.z + 7); }
+    };
+    rowsEl.appendChild(row);
+
+    const light = statusLights[m.id];
+    if (light){
+      light.material.color.set(stale ? 0xf1c40f : (st.status === 'working' ? 0x2ecc71 : 0x95a5a6));
+    }
+  });
+  const upd = data.updated ? Date.parse(data.updated) : 0;
+  footEl.innerHTML =
+    'آخر تحديث للحالة: <b>' + (upd ? fmtTime(upd) : 'غير معروف') + '</b><br>' +
+    'الصفحة بتقرأ الحالة كل ٣٠ ثانية. لو تحديث أي مساعد عدّى ٣ ساعات بتظهر حالته «غير مؤكد».';
+}
+
+async function loadStatus(){
+  try {
+    const r = await fetch('status.json?t=' + Date.now(), {cache:'no-store'});
+    if (!r.ok) throw 0;
+    render(await r.json());
+  } catch(e){
+    footEl.textContent = 'مش قادر أقرأ ملف الحالة دلوقتي — هحاول تاني بعد ٣٠ ثانية.';
+  }
+}
+loadStatus();
+setInterval(loadStatus, 30000);
+
+/* ---------- view buttons ---------- */
+const bOffice = document.getElementById('bOffice');
+const bRot = document.getElementById('bRot');
+const bTop = document.getElementById('bTop');
+function pick(btn){
+  [bOffice, bRot, bTop].forEach(b => b.classList.toggle('on', b === btn));
+}
+bOffice.onclick = () => { pick(bOffice); controls.autoRotate = false; flyTo(CAM_OFFICE); };
+bRot.onclick = () => { pick(bRot); controls.autoRotate = true; controls.autoRotateSpeed = .9; };
+bTop.onclick = () => { pick(bTop); controls.autoRotate = false; flyTo(CAM_TOP); };
+
+/* ---------- loop ---------- */
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+(function loop(){
+  requestAnimationFrame(loop);
+  controls.update();
+  renderer.render(scene, camera);
+})();
+</script>
+</body>
+</html>
