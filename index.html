@@ -75,7 +75,7 @@ controls.minDistance = 3;
 controls.maxDistance = 55;
 controls.maxPolarAngle = Math.PI * .52;
 
-const CAM_OFFICE = {pos:[0, 11.5, 22], tgt:[0, 1.2, -1.5]};
+const CAM_OFFICE = {pos:[-4.5, 11.5, 22], tgt:[-1, 1.2, -1.5]};
 const CAM_TOP    = {pos:[0, 26, 6],  tgt:[0, 0, -1]};
 function flyTo(v){ camera.position.set(...v.pos); controls.target.set(...v.tgt); }
 flyTo(CAM_OFFICE);
