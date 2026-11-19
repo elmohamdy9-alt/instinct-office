@@ -232,10 +232,12 @@ function chair(){
 function person(shirt){
   const g = new THREE.Group();
   const skin = new THREE.MeshStandardMaterial({color:0xc98e5f, roughness:.6});
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry ? new THREE.CapsuleGeometry(.21, .34, 4, 12) : new THREE.SphereGeometry(.3, 12, 10),
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(.2, .26, .6, 14),
     new THREE.MeshStandardMaterial({color:shirt, roughness:.7}));
-  body.scale.set(1, 1.05, .8);
+  body.scale.set(1, 1, .8);
   body.position.y = 1.06; body.castShadow = true; g.add(body);
+  const shoulders = new THREE.Mesh(new THREE.SphereGeometry(.2, 14, 10), body.material);
+  shoulders.scale.set(1, .6, .8); shoulders.position.y = 1.34; shoulders.castShadow = true; g.add(shoulders);
   const head = new THREE.Mesh(new THREE.SphereGeometry(.17, 16, 14), skin);
   head.position.y = 1.52; head.castShadow = true; g.add(head);
   const hair = new THREE.Mesh(new THREE.SphereGeometry(.175, 16, 12, 0, Math.PI*2, 0, Math.PI*.55),
